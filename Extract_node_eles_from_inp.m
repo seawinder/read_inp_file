@@ -1,50 +1,38 @@
 function contentStruct = Extract_node_eles_from_inp_up(filename)
 tic
-% filename = 'Job-20231013.inp';  % 替换为你的文件名
 
-% 读取文件内容并创建关键词的检索
+% 读取inp文件, 并创建关键词的检索
 fileContent = fileread(filename);
 keywords = extractKeywordsFromInp(fileContent);
 
-% 通过对话框选择感兴趣的关键字
+% 通过对话框, 选择感兴趣的关键字
 selectedKeywords = selectKeywords(keywords);
 
 % 显示所选的关键字及其行号
-disp('用户选择的关键字及行号(按ctrl可多选)：');
-for i = 1:length(selectedKeywords)
-    fprintf('关键字: %s, 行号: %d\n', selectedKeywords(i).keyword, selectedKeywords(i).lineNumber);
+disp('请选择关键字(按ctrl可多选)：');
+for select_i = 1:length(selectedKeywords)
+    fprintf('关键字: %s, 行号: %d\n', selectedKeywords(select_i).keyword, selectedKeywords(select_i).lineNumber);
 end
 
 % 提取内容
 contentStruct = extractContentBetweenKeywords(fileContent, keywords, selectedKeywords);
 
 
-
+% 输出时间消耗
 toc
 
 
 
 
-% --------------子程序-----------------------------------
+% -------------------子程序-----------------------------
 
 function selectedKeywords = selectKeywords(keywords)
-    % selectKeywords 通过对话框获取用户所关心的关键字信息
-    %
-    % 输入:
-    %   keywords - 结构体数组，包含关键字及其行号
-    %
-    % 输出:
-    %   selectedKeywords - 结构体数组，包含用户选择的关键字及其行号
-
-    % 提取关键字列表
     keywordList = {keywords.keyword};
-    
     % 弹出多选对话框
     [selected, ok] = listdlg('ListString', keywordList, ...
                              'SelectionMode', 'multiple', ...
                              'PromptString', '选择感兴趣的关键字:', ...
                              'ListSize', [300, 300]);
-    
     % 如果用户点击了“OK”
     if ok
         % 获取所选关键字及其行号
@@ -53,7 +41,6 @@ function selectedKeywords = selectKeywords(keywords)
         selectedKeywords = [];  % 用户取消选择
     end
 end
-
 
 % 提取关键字的函数
 function keywords = extractKeywordsFromInp(fileContent)
@@ -105,7 +92,7 @@ function contentStruct = extractContentBetweenKeywords(fileContent, keywords, se
     % 遍历所选关键字
     for i = 1:length(selectedKeywords)
         targetKeyword = selectedKeywords(i).keyword;
-        % 提取单元类型的节点数
+        % 提取不同单元类型中的节点数
         if contains(targetKeyword, 'Element')
             Ele_type = regexp(targetKeyword, 'type=([\w\d]+)', 'tokens');
             Ele_type = Ele_type{1};
@@ -115,11 +102,11 @@ function contentStruct = extractContentBetweenKeywords(fileContent, keywords, se
             node_number = 4; % for *Node
 
         end
-
+        % 行号，起始关键字的
         targetIndex = selectedKeywords(i).lineNumber;
 
-        % 查找下一个关键字的行号
-        % 找到目标关键字的行号
+        % 为了确定selectedKeywords(i)下一个关键字的行号
+        % 先在inp文件的所有的keyords中，查找到selectedKeywords(i)的位置
         targetIndices = find(strcmp({keywords.keyword}, targetKeyword));
 
         if ~isempty(targetIndices) && targetIndices(1) < length(keywords)
@@ -138,7 +125,7 @@ function contentStruct = extractContentBetweenKeywords(fileContent, keywords, se
         num_node_one_line = size(numericArray{1,1},2);
         num_node_one_two_line = size(numericArray{2,1},2)+num_node_one_line;
 
-        if num_node_one_line < node_number && num_node_one_two_line == node_number
+        if (num_node_one_line < node_number) && (num_node_one_two_line == node_number)
 
             % 每两行合并为1行
             % 假设 numericArray 是已转换的数值单元格数组
@@ -171,7 +158,7 @@ function contentStruct = extractContentBetweenKeywords(fileContent, keywords, se
             numericMatrix = cell2mat(combinedArray);
 
 
-        elseif size(numericArray{1,1},2) == node_number
+        elseif num_node_one_line == node_number
             numericMatrix = cell2mat(numericArray);
         else
             disp('每个单元包含的节点数量，发生错误')
