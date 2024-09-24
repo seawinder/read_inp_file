@@ -1,20 +1,23 @@
-function contentStruct = Extract_node_eles_from_inp(filename)
+function contentStruct = Extract_node_eles_from_inp_up(filename)
 tic
-% filename = 'Job-20231013.inp';  % Replace with your filename
+% filename = 'Job-20231013.inp';  % 替换为你的文件名
 
-% Read file content and create keywords for searching
+% 读取文件内容并创建关键词的检索
 fileContent = fileread(filename);
 keywords = extractKeywordsFromInp(fileContent);
 
-% Select keywords of interest through a dialog
+% 通过对话框选择感兴趣的关键字
 selectedKeywords = selectKeywords(keywords);
 
-% Display selected keywords and their line numbers
+% 显示所选的关键字及其行号
 disp('用户选择的关键字及行号(按ctrl可多选)：');
-arrayfun(@(x) fprintf('关键字: %s, 行号: %d\n', x.keyword, x.lineNumber), selectedKeywords);
+for i = 1:length(selectedKeywords)
+    fprintf('关键字: %s, 行号: %d\n', selectedKeywords(i).keyword, selectedKeywords(i).lineNumber);
+end
 
-% Extract content
+% 提取内容
 contentStruct = extractContentBetweenKeywords(fileContent, keywords, selectedKeywords);
+
 
 
 toc
@@ -22,95 +25,197 @@ toc
 
 
 
+% --------------子程序-----------------------------------
 
 function selectedKeywords = selectKeywords(keywords)
+    % selectKeywords 通过对话框获取用户所关心的关键字信息
+    %
+    % 输入:
+    %   keywords - 结构体数组，包含关键字及其行号
+    %
+    % 输出:
+    %   selectedKeywords - 结构体数组，包含用户选择的关键字及其行号
+
+    % 提取关键字列表
     keywordList = {keywords.keyword};
     
-    % Popup multi-selection dialog
+    % 弹出多选对话框
     [selected, ok] = listdlg('ListString', keywordList, ...
                              'SelectionMode', 'multiple', ...
                              'PromptString', '选择感兴趣的关键字:', ...
                              'ListSize', [300, 300]);
     
+    % 如果用户点击了“OK”
     if ok
-        selectedKeywords = keywords(selected);  % Select only if 'OK' was pressed
+        % 获取所选关键字及其行号
+        selectedKeywords = keywords(selected);
     else
-        selectedKeywords = [];  % Return empty if cancelled
+        selectedKeywords = [];  % 用户取消选择
     end
 end
 
 
+% 提取关键字的函数
 function keywords = extractKeywordsFromInp(fileContent)
-    lines = strsplit(fileContent, '\n');  % Split content by lines
-    isKeywordLine = startsWith(lines, '*') & cellfun(@(x) length(x) > 1 && isstrprop(x(2), 'upper'), lines);
-    
-    % Create a structured array for keywords
-    lineNumbers = find(isKeywordLine);
-    keywords = struct('keyword', strtrim(lines(isKeywordLine)), 'lineNumber', num2cell(lineNumbers));
+    % extractKeywordsFromInp 从指定的 .inp 文件内容提取关键字及其行号
+    %
+    % 输入:
+    %   fileContent - .inp 文件的内容字符串
+    %
+    % 输出:
+    %   keywords - 结构体数组，包含关键字及其行号
+
+    % 初始化存储关键字和行号的结构体数组
+    keywords = struct('keyword', {}, 'lineNumber', {});
+
+    % 按行分割内容
+    lines = strsplit(fileContent, '\n');  % 按行分割内容
+
+    % 遍历每一行
+    for lineNumber = 1:length(lines)
+        line = strtrim(lines{lineNumber});  % 去掉前后的空格
+        
+        % 检查行是否包含关键字
+        if startsWith(line, '*') && length(line) > 1 && isstrprop(line(2), 'upper')
+            keyword = strtrim(line);  % 去掉前后的空格
+            
+            % 存储关键字及其行号
+            keywords(end + 1) = struct('keyword', keyword, 'lineNumber', lineNumber);
+        end
+    end
 end
 
+% 提取内容的函数
 function contentStruct = extractContentBetweenKeywords(fileContent, keywords, selectedKeywords)
-    lines = strsplit(fileContent, '\n');
-    numLines = length(lines);
+    % extractContentBetweenKeywords 提取指定多个关键字与下一个关键字之间的所有内容
+    %
+    % 输入:
+    %   fileContent - .inp 文件的内容字符串
+    %   keywords - 结构体数组，包含所有关键字及其行号
+    %   selectedKeywords - 结构体数组，包含用户选择的关键字及行号
+    %
+    % 输出:
+    %   contentStruct - 结构体数组，用于保存提取的关键字之间的内容
+
     contentStruct = struct('keyword', {}, 'content', {});
     
+    % 按行分割内容
+    lines = strsplit(fileContent, '\n');  % 按行分割内容
+
+    % 遍历所选关键字
     for i = 1:length(selectedKeywords)
         targetKeyword = selectedKeywords(i).keyword;
-        targetIndex = selectedKeywords(i).lineNumber;
-        
-        % Determine node number based on the target keyword
+        % 提取单元类型的节点数
         if contains(targetKeyword, 'Element')
             Ele_type = regexp(targetKeyword, 'type=([\w\d]+)', 'tokens');
             Ele_type = Ele_type{1};
-            node_number = extractElementTypeNumber(Ele_type) + 1;
+            node_number = extractElementTypeNumber(Ele_type)+1;
+
         else
             node_number = 4; % for *Node
+
         end
-        
-        % Find next keyword line number
+
+        targetIndex = selectedKeywords(i).lineNumber;
+
+        % 查找下一个关键字的行号
+        % 找到目标关键字的行号
         targetIndices = find(strcmp({keywords.keyword}, targetKeyword));
-        nextKeywordLine = (isempty(targetIndices) || targetIndices(1) == length(keywords)) ...
-                          * numLines + (targetIndices(1) < length(keywords)) * (keywords(targetIndices(1) + 1).lineNumber - 1);
-        
-        % Extract content between lines
-        content = strtrim(lines(targetIndex + 1 : nextKeywordLine))';  
-        contentWithoutCommas = strrep(content, ',', ' ');  
-        
-        % Convert to numeric array
-        numericArray = cellfun(@str2num, contentWithoutCommas, 'UniformOutput', false);
-        
-        % Merge lines if necessary
-        numericMatrix = mergeNumericLines(numericArray, node_number);
-        
-        % Add to the struct
-        contentStruct(end + 1) = struct('keyword', targetKeyword, 'content', numericMatrix);
+
+        if ~isempty(targetIndices) && targetIndices(1) < length(keywords)
+            nextKeywordLine = keywords(targetIndices(1) + 1).lineNumber - 1;  % 下一个关键字的前一行
+        else
+            nextKeywordLine = length(lines);  % 如果没有下一个关键字，设置为文件末尾
+        end
+
+        % 提取指定行范围的内容
+        content = strtrim(lines(targetIndex + 1 : nextKeywordLine))';  % 提取行号之间的内容
+        % 将所有的内容中的逗号替换为空格，这样可以使用 str2num
+        contentWithoutCommas = strrep(content, ',', ' ');  % 将逗号替换为空格
+
+        % 将 cell 数组中的字符串直接转换为数值矩阵
+        numericArray = cellfun(@(x) str2num(x), contentWithoutCommas, 'UniformOutput', false);
+        num_node_one_line = size(numericArray{1,1},2);
+        num_node_one_two_line = size(numericArray{2,1},2)+num_node_one_line;
+
+        if num_node_one_line < node_number && num_node_one_two_line == node_number
+
+            % 每两行合并为1行
+            % 假设 numericArray 是已转换的数值单元格数组
+            % 确定 numericArray 的行数
+            numRows = size(numericArray, 1);
+
+            % 初始化一个新的 cell 数组用于存储合并后的行
+            combinedArray = cell(numRows / 2, 1);
+
+            % 遍历每个奇数行并将其与后面的偶数行合并
+            for row_i = 1:2:numRows
+                % 奇数行数据
+                oddRow = numericArray{row_i, 1};
+
+                % 偶数行数据
+                if row_i + 1 <= numRows
+                    evenRow = numericArray{row_i + 1, 1};
+                else
+                    evenRow = [];  % 如果没有偶数行
+                end
+
+                % 合并奇数行和偶数行的数据
+                combinedRow = [oddRow, evenRow];  % 水平拼接行数据
+
+                % 存储合并后的数据
+                combinedArray{(row_i + 1) / 2, 1} = combinedRow;
+            end
+
+            % 将 cell 数组转换为矩阵
+            numericMatrix = cell2mat(combinedArray);
+
+
+        elseif size(numericArray{1,1},2) == node_number
+            numericMatrix = cell2mat(numericArray);
+        else
+            disp('每个单元包含的节点数量，发生错误')
+            break;
+        end
+
+        % 转换后的 numericArray 是一个 cell 数组，我们可以直接将其展开为矩阵
+
+ 
+
+        % 添加到结构体
+        contentStruct(end + 1) = struct('keyword', targetKeyword, ...
+                                         'content', numericMatrix);  % 使用表格作为内容
     end
 end
 
-function numericMatrix = mergeNumericLines(numericArray, node_number)
-    numRows = length(numericArray);
-    
-    if numRows == 0
-        numericMatrix = [];
-        return;
-    end
-    
-    if size(numericArray{1}, 2) < node_number && (numRows > 1 && size(numericArray{2}, 2) + size(numericArray{1}, 2) == node_number)
-        % Combine odd and even rows
-        combinedRows = arrayfun(@(row) [numericArray{row}, numericArray{row + 1}], 1:2:numRows-1, 'UniformOutput', false);
-        numericMatrix = cell2mat(combinedRows);
-    else
-        numericMatrix = cell2mat(numericArray);
-    end
-end
 
 function extractedNumbers = extractElementTypeNumber(elementTypes)
+    % extractElementTypeNumber 提取单元类型字符串中的第二个或者唯一的数值
+    %
+    % 输入:
+    %   elementTypes - 包含单元类型的元胞数组，字符串形式（例如 'C3D8R'）
+    %
+    % 输出:
+    %   extractedNumbers - 数值数组，包含从每个单元类型中提取出的数值
+
+    % 初始化结果数组
     extractedNumbers = zeros(size(elementTypes));
+
+    % 遍历每个单元类型字符串
     for i = 1:length(elementTypes)
-        matches = regexp(elementTypes{i}, '\d+', 'match');
-        extractedNumbers(i) = str2double(matches{min(2, end)});
+        % 使用正则表达式提取字符串中的数值
+        matches = regexp(elementTypes{i}, '\d+', 'match');  % 查找数字部分
+
+        % 如果有数值，则选择第二个或者唯一的一个数值
+        if ~isempty(matches)
+            % 只提取第二个数值，如果只有一个数值则提取唯一的
+            if length(matches) >= 2
+                extractedNumbers(i) = str2double(matches{2});
+            else
+                extractedNumbers(i) = str2double(matches{1});
+            end
+        end
     end
 end
-
 
 end
