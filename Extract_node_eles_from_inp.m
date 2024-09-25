@@ -1,4 +1,4 @@
-function contentStruct = Extract_node_eles_from_inp_up(filename)
+function contentStruct = Extract_node_eles_from_inp(filename)
 tic
 
 % 读取inp文件, 并创建关键词的检索
@@ -92,16 +92,25 @@ function contentStruct = extractContentBetweenKeywords(fileContent, keywords, se
     % 遍历所选关键字
     for i = 1:length(selectedKeywords)
         targetKeyword = selectedKeywords(i).keyword;
-        % 提取不同单元类型中的节点数
+
+        %提取不同单元类型中的节点数
+
         if contains(targetKeyword, 'Element')
+
             Ele_type = regexp(targetKeyword, 'type=([\w\d]+)', 'tokens');
             Ele_type = Ele_type{1};
+            % 判断单元类型共有几个节点
             node_number = extractElementTypeNumber(Ele_type)+1;
-
         else
-            node_number = 4; % for *Node
-
+            node_number = 4;
         end
+
+        %             node_number = extractElementTypeNumber(Ele_type)+1;
+        %
+        %         else
+        %             node_number = 4; % for *Node
+        %
+        %         end
         % 行号，起始关键字的
         targetIndex = selectedKeywords(i).lineNumber;
 
@@ -176,33 +185,49 @@ function contentStruct = extractContentBetweenKeywords(fileContent, keywords, se
 end
 
 
-function extractedNumbers = extractElementTypeNumber(elementTypes)
-    % extractElementTypeNumber 提取单元类型字符串中的第二个或者唯一的数值
-    %
-    % 输入:
-    %   elementTypes - 包含单元类型的元胞数组，字符串形式（例如 'C3D8R'）
-    %
-    % 输出:
-    %   extractedNumbers - 数值数组，包含从每个单元类型中提取出的数值
+function node_number = extractElementTypeNumber(Ele_type)
+    % 根据单元类型名称提取节点数目
 
-    % 初始化结果数组
-    extractedNumbers = zeros(size(elementTypes));
-
-    % 遍历每个单元类型字符串
-    for i = 1:length(elementTypes)
-        % 使用正则表达式提取字符串中的数值
-        matches = regexp(elementTypes{i}, '\d+', 'match');  % 查找数字部分
-
-        % 如果有数值，则选择第二个或者唯一的一个数值
-        if ~isempty(matches)
-            % 只提取第二个数值，如果只有一个数值则提取唯一的
-            if length(matches) >= 2
-                extractedNumbers(i) = str2double(matches{2});
-            else
-                extractedNumbers(i) = str2double(matches{1});
-            end
+    % 判断单元类型是否以 'C' 开头（固体单元）
+    
+    if startsWith(Ele_type, 'C')
+        switch Ele_type{1}
+            case {'C3D8', 'C3D8R'}
+                node_number = 8;  % 8节点的固体单元
+            case {'C3D20', 'C3D20R'}
+                node_number = 20; % 20节点的固体单元
+            case 'C3D15'
+                node_number = 15; % 15节点的固体单元
+            otherwise
+                error('未知的固体单元类型: %s', Ele_type);
         end
+        
+    % 判断单元类型是否以 'S' 开头（板壳单元）
+    elseif startsWith(Ele_type, 'S')
+        switch Ele_type{1}
+            case {'S4', 'S4R'}
+                node_number = 4;  % 4节点的板壳单元
+            case {'S8', 'S8R', 'SC8R'}
+                node_number = 8;  % 8节点的板壳单元
+            case 'S3'
+                node_number = 3;  % 3节点的板壳单元
+            otherwise
+                error('未知的板壳单元类型: %s', Ele_type);
+        end
+        
+    % 判断单元类型是否以 'B' 开头（梁单元）
+    elseif startsWith(Ele_type, 'B')
+        switch Ele_type{1}
+            case 'B32'
+                node_number = 3;  % 3节点的梁单元
+            otherwise
+                error('未知的梁单元类型: %s', Ele_type);
+        end
+        
+    else
+        error('未知的单元类型: %s', Ele_type);
     end
 end
+
 
 end
